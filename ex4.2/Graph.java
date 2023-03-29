@@ -1,9 +1,25 @@
+//graph class for ENSF 338 ex4.1
+//Includes GraphNode and GraphEdge class at the bottom
+//for convienience
 import java.io.*;
 import java.util.*;
-
 public class Graph{
     public List<GraphNode> nodes;
     public List<GraphEdge> edges;
+
+    public static void main(String[] args) {
+        Graph graph = Graph.importFromFile("random.dot");
+        if (graph == null) {
+            System.out.println("Failed to import graph from file");
+            return;
+        }
+        GraphNode startNode = graph.nodes.get(0);
+        Map<GraphNode, Integer> distances = graph.slowSP(startNode);
+        for (GraphNode node : graph.nodes) {
+            System.out.println("Distance from " + startNode.data + " to " + node.data + ": " + distances.get(node));
+        }
+        
+    }
 
     //Simple contructor for graph
     public Graph() {
@@ -58,8 +74,6 @@ public class Graph{
         }
     }
 
-
-
     //imports a undefined graph object from a file given the
     //GraphViz format. Also sets them as items
     public static Graph importFromFile(String fileName) {
@@ -69,6 +83,7 @@ public class Graph{
             if (!line.startsWith("strict graph")) {
                 return null; // The file does not contain an undirected graph
             }
+
             String graphName = line.substring("strict graph".length()).trim();
 
             // Create a new Graph object
@@ -77,7 +92,7 @@ public class Graph{
             // Parse the edge definitions
             while (scanner.hasNextLine()) {
                 line = scanner.nextLine().trim();
-                if (line.isEmpty() || line.startsWith("//")) {
+                if (line.isEmpty() || line.startsWith("//") || line.startsWith("}")) {
                     continue; // Skip empty lines and comments
                 }
                 if (line.endsWith(";")) {
@@ -85,6 +100,7 @@ public class Graph{
                 }
                 String[] tokens = line.split("\\s*--\\s*");
                 if (tokens.length != 2) {
+                    System.out.println("Invalid edge definition: " + line);
                     return null; // The line does not contain a valid edge definition
                 }
                 GraphNode node1 = graph.addNode(tokens[0]);
@@ -99,6 +115,7 @@ public class Graph{
                     }
                     String weightStr = line.substring(startIndex, endIndex).trim();
                     try {
+                        System.out.println(weightStr);
                         weight = Integer.parseInt(weightStr);
                     } catch (NumberFormatException e) {
                         return null; // The weight is not a valid integer
@@ -113,53 +130,88 @@ public class Graph{
         }
     }
 
-    public static void slowSP(GraphNode start) {
-        Set<GraphNode> visited = new HashSet<>();
-        Map<GraphNode, Integer> distance = new HashMap<>();
-
-        // Initialize the distance to all nodes to be infinity, except for the starting node
-        for (GraphNode node : start.graph.nodes) {
-            if (node == start) {
-                distance.put(node, 0);
-            } else {
-                distance.put(node, Integer.MAX_VALUE);
-            }
-        }
-
-        // Repeat until all nodes have been visited
-        while (visited.size() < start.graph.nodes.size()) {
-            // Find the unvisited node with the smallest tentative distance
-            GraphNode current = null;
-            int smallestDistance = Integer.MAX_VALUE;
-            for (GraphNode node : start.graph.nodes) {
-                if (!visited.contains(node) && distance.get(node) < smallestDistance) {
-                    current = node;
-                    smallestDistance = distance.get(node);
+    public Map<GraphNode, Integer> slowSP(GraphNode startNode) {
+        Map<GraphNode, Integer> distances = new HashMap<>(); // Map of nodes to their distances from startNode
+        Set<GraphNode> unvisitedNodes = new HashSet<>(nodes); // Set of nodes that have not been visited yet
+        distances.put(startNode, 0); // Start node has a distance of 0
+        unvisitedNodes.remove(startNode); // Remove start node from unvisited nodes set
+    
+        while (!unvisitedNodes.isEmpty()) {
+            // Find the unvisited node with the smallest distance
+            GraphNode closestNode = null;
+            int closestDistance = Integer.MAX_VALUE;
+            for (GraphNode node : unvisitedNodes) {
+                Integer distance = distances.get(node);
+                if (distance != null && distance < closestDistance) {
+                    closestNode = node;
+                    closestDistance = distance;
                 }
             }
-
-            // Mark the current node as visited
-            visited.add(current);
-
-            // Update the distances of all neighbors of the current node
-            for (GraphEdge edge : current.edges) {
-                GraphNode neighbor = edge.getOtherNode(current);
-                int newDistance = distance.get(current) + edge.weight;
-                if (newDistance < distance.get(neighbor)) {
-                    distance.put(neighbor, newDistance);
+    
+            // If all remaining unvisited nodes are unreachable from startNode, exit the loop
+            if (closestNode == null) {
+                break;
+            }
+    
+            // Update distances to neighboring nodes
+            for (GraphEdge edge : closestNode.edges) {
+                GraphNode neighbor = (edge.node1 == closestNode) ? edge.node2 : edge.node1;
+                if (unvisitedNodes.contains(neighbor)) {
+                    int newDistance = closestDistance + edge.weight;
+                    Integer currentDistance = distances.get(neighbor);
+                    if (currentDistance == null || newDistance < currentDistance) {
+                        distances.put(neighbor, newDistance);
+                    }
+                }
+            }
+    
+            unvisitedNodes.remove(closestNode); // Mark closestNode as visited
+        }
+    
+        return distances;
+    }
+    
+    // Finds the shortest path from the input node to all other nodes using a fast implementation of Dijkstra's algorithm.
+    public Map<GraphNode, Integer> fastSP(GraphNode startNode) {
+        Map<GraphNode, Integer> distances = new HashMap<>(); // Map of nodes to their distances from startNode
+        PriorityQueue<GraphNode> unvisitedNodes = new PriorityQueue<>(Comparator.comparingInt(distances::get)); // Priority queue of unvisited nodes, ordered by distance
+        Set<GraphNode> visitedNodes = new HashSet<>(); // Set of visited nodes
+        distances.put(startNode, 0); // Start node has a distance of 0
+        unvisitedNodes.add(startNode); // Add start node to priority queue
+    
+        while (!unvisitedNodes.isEmpty()) {
+            GraphNode closestNode = unvisitedNodes.poll(); // Node with smallest distance
+            int closestDistance = distances.get(closestNode);
+    
+            if (visitedNodes.contains(closestNode)) {
+                continue; // Skip already visited nodes
+            }
+            visitedNodes.add(closestNode);
+    
+            // Update distances to neighboring nodes
+            for (GraphEdge edge : closestNode.edges) {
+                GraphNode neighbor = (edge.node1 == closestNode) ? edge.node2 : edge.node1;
+                int newDistance = closestDistance + edge.weight;
+                Integer currentDistance = distances.get(neighbor);
+                if (currentDistance == null || newDistance < currentDistance) {
+                    distances.put(neighbor, newDistance);
+                    if (unvisitedNodes.contains(neighbor)) {
+                        unvisitedNodes.remove(neighbor);
+                    }
+                    unvisitedNodes.add(neighbor);
                 }
             }
         }
-
-}
-
-
-
+    
+        return distances;
+    }
+    
+    
 }
 
 
 //Just a simple GraphNode class
-public class GraphNode {
+class GraphNode {
     public String data;
     public List<GraphEdge> edges;
 
@@ -167,10 +219,11 @@ public class GraphNode {
         this.data = data;
         this.edges = new ArrayList<>();
     }
+    
 }
 
 //Just a an example of a graph edge class
-public class GraphEdge {
+class GraphEdge {
     public GraphNode node1;
     public GraphNode node2;
     public int weight;
@@ -181,4 +234,3 @@ public class GraphEdge {
         this.weight = weight;
     }
 }
-
