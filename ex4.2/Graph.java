@@ -3,6 +3,8 @@
 //for convienience
 import java.io.*;
 import java.util.*;
+import matplotlib4j.*;
+
 public class Graph{
     public List<GraphNode> nodes;
     public List<GraphEdge> edges;
@@ -14,9 +16,71 @@ public class Graph{
             return;
         }
         GraphNode startNode = graph.nodes.get(0);
-        Map<GraphNode, Integer> distances = graph.slowSP(startNode);
+        long slowTotalTime = 0;
+        long fastTotalTime = 0;
+        long slowMaxTime = Long.MIN_VALUE;
+        long fastMaxTime = Long.MIN_VALUE;
+        long slowMinTime = Long.MAX_VALUE;
+        long fastMinTime = Long.MAX_VALUE;
+        int nNodes = graph.nodes.size();
+
         for (GraphNode node : graph.nodes) {
-            System.out.println("Distance from " + startNode.data + " to " + node.data + ": " + distances.get(node));
+            long startTime = System.nanoTime();
+            graph.slowSP(node);
+            long endTime = System.nanoTime();
+            long elapsedTime = endTime - startTime;
+            slowTotalTime += elapsedTime;
+            slowMaxTime = Math.max(slowMaxTime, elapsedTime);
+            slowMinTime = Math.min(slowMinTime, elapsedTime);
+
+            startTime = System.nanoTime();
+            graph.fastSP(node);
+            endTime = System.nanoTime();
+            elapsedTime = endTime - startTime;
+            fastTotalTime += elapsedTime;
+            fastMaxTime = Math.max(fastMaxTime, elapsedTime);
+            fastMinTime = Math.min(fastMinTime, elapsedTime);
+        }
+
+        double slowAvgTime = (double) slowTotalTime / nNodes;
+        double fastAvgTime = (double) fastTotalTime / nNodes;
+        System.out.println("slowSP average time: " + slowAvgTime + " nanoseconds");
+        System.out.println("slowSP max time: " + slowMaxTime + " nanoseconds");
+        System.out.println("slowSP min time: " + slowMinTime + " nanoseconds");
+        System.out.println("fastSP average time: " + fastAvgTime + " nanoseconds");
+        System.out.println("fastSP max time: " + fastMaxTime + " nanoseconds");
+        System.out.println("fastSP min time: " + fastMinTime + " nanoseconds");
+
+        // Plot a histogram of execution times using matplotlib4j
+        Map<String, Object> histArgs = new HashMap<>();
+        histArgs.put("bins", 20);
+        histArgs.put("alpha", 0.5);
+        histArgs.put("label", new String[] {"slowSP", "fastSP"});
+        histArgs.put("color", new String[] {"blue", "red"});
+
+        double[] slowTimes = new double[nNodes];
+        double[] fastTimes = new double[nNodes];
+
+        for (int i = 0; i < nNodes; i++) {
+            long startTime = System.nanoTime();
+            graph.slowSP(graph.nodes.get(i));
+            long endTime = System.nanoTime();
+            long elapsedTime = endTime - startTime;
+            slowTimes[i] = (double) elapsedTime;
+
+            startTime = System.nanoTime();
+            graph.fastSP(graph.nodes.get(i));
+            endTime = System.nanoTime();
+            elapsedTime = endTime - startTime;
+            fastTimes[i] = (double) elapsedTime;
+        }
+
+        Hist.hist(slowTimes, histArgs);
+        Hist.hist(fastTimes, histArgs);
+        try {
+            Hist.show();
+        } catch (PythonExecutionException e) {
+            e.printStackTrace();
         }
         
     }
